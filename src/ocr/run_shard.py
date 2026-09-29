@@ -6,7 +6,7 @@ python bench_prefetch.py --manifest manifest.jsonl --out-dir /tmp/test_pf \
     --shard-index 0 --num-shards 1000 --batch 8 --render-workers 1
 """
 
-## batch=8 + prefetch：后台预渲染下一批，与当前批 GPU 识别 overlap
+## batch=8 + prefetch: Pre-render next batch in background to overlap with current batch GPU inference
 import argparse, json, os, time, traceback
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
