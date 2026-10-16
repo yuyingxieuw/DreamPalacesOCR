@@ -218,3 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 __pycache__/
 *.pyc
+
+# orignial data
+data/
+*.jsonl

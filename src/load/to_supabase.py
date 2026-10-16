@@ -24,8 +24,8 @@ Design notes:
 
 Usage:
     export SUPABASE_DB_URL="postgresql://...key..."
-    python tillicum_to_supabase.py --result /gpfs/scrubbed/yxie993/results.jsonl
-    python tillicum_to_supabase.py --result /gpfs/scrubbed/yxie993/results.jsonl --batch-size 50
+    python to_supabase.py --result /gpfs/scrubbed/yxie993/results.jsonl
+    python to_supabase.py --result /gpfs/scrubbed/yxie993/results.jsonl --batch-size 50
 """
 import argparse
 import json
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
     filename   text,
     path_parts jsonb,
     region     text,
-    city       text,
+    state      text,
     newspaper  text,
     year       text,
     content    jsonb
