@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+--- results.jsonl will be stored in R2, so need to change this db to a index db-- 
 Migrate OCR results (results.jsonl) from Tillicum into Supabase Postgres.
 
 Each line of results.jsonl looks like:
@@ -18,11 +19,11 @@ Design notes:
 - Batched: rows are inserted and committed in batches (default 1000) instead of
   one giant 190k-row transaction. Keeps memory bounded and means an interruption
   only loses the last uncommitted batch, which the next run re-inserts.
-- Raw data preserved: path_parts and pages are stored as jsonb. region/city/
+- Raw data preserved: path_parts and pages are stored as jsonb. region/state/
   newspaper/year are *derived* from path_parts for convenient querying, but the
   original path_parts stays so they can be recomputed if the derivation was off.
 
-Usage:
+Usage if run in tillicum:
     export SUPABASE_DB_URL="postgresql://...key..."
     python to_supabase.py --result /gpfs/scrubbed/yxie993/results.jsonl
     python to_supabase.py --result /gpfs/scrubbed/yxie993/results.jsonl --batch-size 50
@@ -53,7 +54,7 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
 
 INSERT_SQL = f"""
 INSERT INTO {TABLE}
-    (file_id, filename, path_parts, region, city, newspaper, year, content)
+    (file_id, filename, path_parts, region, state, newspaper, year, content)
 VALUES %s
 ON CONFLICT (file_id) DO NOTHING
 """
@@ -67,7 +68,7 @@ def transform(r: dict) -> tuple:
     """Turn one JSONL record into a row tuple matching INSERT_SQL's columns."""
     path_parts = r.get("path_parts") or []
     region    = path_parts[0] if len(path_parts) > 0 else None
-    city      = path_parts[1] if len(path_parts) > 1 else None
+    state     = path_parts[1] if len(path_parts) > 1 else None
     newspaper = path_parts[2] if len(path_parts) > 2 else None
     year      = path_parts[3] if len(path_parts) > 3 else None
 
@@ -76,7 +77,7 @@ def transform(r: dict) -> tuple:
         r.get("filename"),
         json.dumps(path_parts, ensure_ascii=False),   # -> jsonb
         region,
-        city,
+        state,
         newspaper,
         year,
         json.dumps(r.get("pages"), ensure_ascii=False),  # -> jsonb
@@ -93,14 +94,17 @@ def flush(cur, conn, batch):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--result", required=True, type=Path,
-                    help="path to merged results.jsonl")
-    ap.add_argument("--batch-size", type=int, default=1000)
-    args = ap.parse_args()
+    ## if run on tillicum uncomment the following
+    # ap = argparse.ArgumentParser()
+    # ap.add_argument("--result", required=True, type=Path,
+    #                 help="path to merged results.jsonl")
+    # ap.add_argument("--batch-size", type=int, default=1000)
+    # args = ap.parse_args()
 
-    if not args.result.exists():
-        raise SystemExit(f"Result file not found: {args.result}")
+    # if not args.result.exists():
+    #     raise SystemExit(f"Result file not found: {args.result}")
+    INPUT_PATH = "/Users/xy/Documents/workspace/DreamPalacesOCR/data/ocr_merged.jsonl"
+    BATCH_SIZE= 500
 
     load_dotenv()
     db_url = os.environ.get("SUPABASE_DB_URL")
@@ -117,7 +121,8 @@ def main():
     read = inserted_batches = bad = 0
     batch = []
 
-    with args.result.open("r") as f:
+    total = 197364
+    with open(INPUT_PATH,"r") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -131,10 +136,13 @@ def main():
             batch.append(transform(obj))
             read += 1
 
-            if len(batch) >= args.batch_size:
+            if len(batch) >= BATCH_SIZE:
                 inserted_batches += flush(cur, conn, batch)
                 batch = []
-                print(f"  committed {inserted_batches} rows so far...", flush=True)
+                if read % 5000 < BATCH_SIZE:
+                    pct = read / total * 100 if total else 0
+                    print(f"  {read}/{total} ({pct:.1f}%) read, {inserted_batches} committed",
+                          flush=True)
 
     # Final partial batch.
     inserted_batches += flush(cur, conn, batch)
@@ -143,7 +151,7 @@ def main():
     conn.close()
 
     print(f"\nDone.")
-    print(f"  records read from {args.result.name}: {read}")
+    print(f"  records read from {INPUT_PATH}: {read}")
     print(f"  rows sent to Postgres:                {inserted_batches}")
     print(f"  skipped (bad JSON lines):             {bad}")
     print(f"\nNote: rows already present were skipped via ON CONFLICT DO NOTHING,")
